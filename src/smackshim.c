@@ -225,6 +225,7 @@ typedef struct ShimSmack {
     u32 audio_starts_at_ms;
     bool audio_enabled;
     AudioState audio;
+    int64_t current_video_pts;
 } ShimSmack;
 
 static LPDIRECTSOUND g_direct_sound;
@@ -989,6 +990,9 @@ static bool receive_video_frame(ShimSmack *movie)
     for (;;) {
         const int receive_ret = avcodec_receive_frame(movie->video_codec, movie->video_frame);
         if (receive_ret == 0) {
+            movie->current_video_pts = movie->video_frame->pts;
+            if (movie->current_video_pts == AV_NOPTS_VALUE)
+                movie->current_video_pts = 0;
             return true;
         }
         if (receive_ret == AVERROR_EOF) {
@@ -1171,7 +1175,25 @@ u32 __stdcall SmackWait(Smack *smk)
     if (!movie->clock_started) {
         return 0;
     }
-    const u32 due = frame_ms(movie, smk->FrameNum);
+
+    u32 due = 0;
+    bool use_pts = false;
+
+    if (movie->current_video_pts != AV_NOPTS_VALUE) {
+        AVStream *stream = movie->format->streams[movie->video_stream];
+        if (stream) {
+            due = (u32)av_rescale_q(
+                movie->current_video_pts,
+                stream->time_base,
+                (AVRational){1, 1000}
+            );
+            use_pts = true;
+        }
+    }
+
+    if (!use_pts) {
+        due = frame_ms(movie, smk->FrameNum);
+    }
     const u32 now = playback_clock_ms(movie);
     const s32 wait = (s32)(due - now);
     if (wait <= 0) {
