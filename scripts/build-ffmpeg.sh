@@ -74,7 +74,6 @@ cd "$BUILD"
     --disable-avfilter \
     --disable-encoders \
     --disable-muxers \
-    --disable-hwaccels \
     --disable-devices \
     --disable-protocols \
     --enable-protocol=file \
